@@ -40,41 +40,41 @@ def build_one_configuration(suite, arch, build_desc)
 
   bits = @bitness[arch] or raise "unknown architecture ${arch}"
 
-  if ENV["USE_LXC"]
-      ENV["LXC_ARCH"] = arch
-      ENV["LXC_SUITE"] = suite
-  end
+  #if ENV["USE_LXC"]
+  #    ENV["LXC_ARCH"] = arch
+  #    ENV["LXC_SUITE"] = suite
+  #end
 
   suitearch = "#{suite}-#{arch}"
 
-  info "Stopping target if it is up"
-  system "stop-target"
+  #info "Stopping target if it is up"
+  #system "stop-target"
 
-  sleep 1
+  #sleep 1
 
-  unless @options[:skip_image]
-    info "Making a new image copy"
-    system! "make-clean-vm --suite #{suite} --arch #{arch}"
-  end
+  #unless @options[:skip_image]
+  #  info "Making a new image copy"
+  #  system! "make-clean-vm --suite #{suite} --arch #{arch}"
+  #end
 
-  info "Starting target"
-  system! "start-target #{bits} #{suitearch}&"
+  #info "Starting target"
+  #system! "start-target #{bits} #{suitearch}&"
 
-  $stdout.write "Checking if target is up"
+  #$stdout.write "Checking if target is up"
 
-  (1..30).each do
-    system "on-target true 2> /dev/null" and break
-    sleep 2
-    $stdout.write '.'
-  end
+  #(1..30).each do
+  #  system "on-target true 2> /dev/null" and break
+  #  sleep 2
+  #  $stdout.write '.'
+  #end
 
-  info ''
+  #info ''
 
-  system! "on-target true"
+  #system! "on-target true"
 
-  system! "on-target -u root tee -a /etc/sudoers.d/#{ENV['DISTRO'] || 'ubuntu'} > /dev/null << EOF
-%#{ENV['DISTRO'] || 'ubuntu'} ALL=(ALL) NOPASSWD: ALL
-EOF" if build_desc["sudo"] and @options[:allow_sudo]
+  #system! "on-target -u root tee -a /etc/sudoers.d/#{ENV['DISTRO'] || 'ubuntu'} > /dev/null << EOF
+#%#{ENV['DISTRO'] || 'ubuntu'} ALL=(ALL) NOPASSWD: ALL
+#EOF" if build_desc["sudo"] and @options[:allow_sudo]
 
   info "Preparing build environment"
   system! "on-target setarch #{@arches[arch]} bash < target-bin/init-build.sh"
@@ -95,17 +95,17 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
   end
 
   info "Updating apt-get repository (log in var/install.log)"
-  system! "on-target -u root apt-get update > var/install.log 2>&1"
+  system! "on-target sudo apt-get update > var/install.log 2>&1"
 
   info "Installing additional packages (log in var/install.log)"
-  system! "on-target -u root -e DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends -y install #{build_desc["packages"].join(" ")} > var/install.log 2>&1"
+  system! "on-target sudo DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends -y install #{build_desc["packages"].join(" ")} > var/install.log 2>&1"
 
-  if @options[:upgrade] || system("on-target -u root '[ ! -e /var/cache/gitian/initial-upgrade ]'")
+  if @options[:upgrade] || system("on-target sudo '[ ! -e /var/cache/gitian/initial-upgrade ]'")
       info "Upgrading system, may take a while"
-      system! "on-target -u root bash < target-bin/upgrade-system.sh > var/install.log 2>&1"
+      system! "on-target sudo bash < target-bin/upgrade-system.sh > var/install.log 2>&1"
   end
   info "Creating package manifest"
-  system! "on-target -u root bash < target-bin/grab-packages.sh > var/base-#{suitearch}.manifest"
+  system! "on-target sudo bash < target-bin/grab-packages.sh > var/base-#{suitearch}.manifest"
 
   info "Creating build script (var/build-script)"
 

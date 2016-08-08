@@ -47,7 +47,10 @@ fi
 #fi
 
 if [ -z "$USE_LXC" ]; then
-    ssh -oConnectTimeout=30 -oNoHostAuthenticationForLocalhost=yes -i ${GITIAN_BASE:-.}/var/id_rsa -p $VM_SSH_PORT $TUSER@localhost $*
+    #cmd="ssh -oConnectTimeout=30 -oNoHostAuthenticationForLocalhost=yes -i ${GITIAN_BASE:-.}/var/id_rsa -p $VM_SSH_PORT $TUSER@localhost $*"
+    cmd="ssh -oConnectTimeout=30 -oNoHostAuthenticationForLocalhost=yes -i ${GITIAN_BASE:-.}/id_rsa -p 22 $TUSER@172.17.0.3 $*"
+    echo $cmd
+    ${cmd}
 else
     config-lxc
     sudo $LXC_EXECUTE -n gitian -f var/lxc.config -- sudo -u $TUSER $ENV -i -- $*
