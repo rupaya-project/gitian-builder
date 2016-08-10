@@ -183,7 +183,7 @@ OptionParser.new do |opts|
   end
 end.parse!
 
-if !ENV["USE_LXC"] and !File.exist?("/dev/kvm")
+if !ENV["USE_LXC"] and !File.exist?("/dev/kvm") and !ENV["USE_DOCKER"]
     $stderr.puts "\n************* WARNING: kvm not loaded, this will probably not work out\n\n"
 end
 
@@ -205,11 +205,13 @@ in_sums = []
 build_dir = 'build'
 result_dir = 'result'
 cache_dir = 'cache'
+var_dir = 'var'
 enable_cache = build_desc["enable_cache"]
 
 FileUtils.rm_rf(build_dir)
 FileUtils.mkdir(build_dir)
 FileUtils.mkdir_p(result_dir)
+FileUtils.mkdir_p(var_dir)
 
 package_name = build_desc["name"] or raise "must supply name"
 package_name = sanitize(package_name, "package name")

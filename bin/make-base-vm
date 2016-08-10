@@ -79,8 +79,6 @@ elif [ $DISTRO = "debian" ]; then
   SECURITY_MIRROR=$MIRROR_BASE/security.debian.org/
 fi
 
-mkdir -p var
-
 if [ ! -e var/id_rsa ]; then
   ssh-keygen -t rsa -f var/id_rsa -N ""
 fi
