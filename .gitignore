@@ -11,3 +11,4 @@ base*
 sigs
 target-bin/bootstrap-fixup
 .vagrant
+cache
