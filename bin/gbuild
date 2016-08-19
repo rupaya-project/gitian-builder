@@ -86,11 +86,11 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
 
   if build_desc["enable_cache"]
     if File.directory?("cache/#{build_desc["name"]}")
-      system! "copy-to-target #{@quiet_flag} cache/#{build_desc["name"]}/ /home/ubuntu/cache/"
+      system! "copy-to-target #{@quiet_flag} #{cache_dir}/#{build_desc["name"]}/ /home/ubuntu/cache/"
     end
 
     if File.directory?("cache/common")
-      system! "copy-to-target #{@quiet_flag} cache/common/ /home/ubuntu/cache/"
+      system! "copy-to-target #{@quiet_flag} #{cache_dir}/common/ /home/ubuntu/cache/"
     end
   end
 
