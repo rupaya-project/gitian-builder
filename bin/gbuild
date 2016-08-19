@@ -194,7 +194,7 @@ build_desc = YAML.load_file(build_desc_file)
 in_sums = []
 
 build_dir = 'build'
-result_dir = 'result'
+result_dir = '/shared/result'
 cache_dir = '/shared/cache'
 var_dir = 'var'
 enable_cache = build_desc["enable_cache"]
