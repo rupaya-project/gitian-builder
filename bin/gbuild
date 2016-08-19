@@ -81,16 +81,16 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
 
   build_desc["files"].each do |filename|
     filename = sanitize(filename, "files section")
-    system! "copy-to-target #{@quiet_flag} inputs/#{filename} build/"
+    system! "copy-to-target #{@quiet_flag} inputs/#{filename} /home/ubuntu/build/"
   end
 
   if build_desc["enable_cache"]
     if File.directory?("cache/#{build_desc["name"]}")
-      system! "copy-to-target #{@quiet_flag} cache/#{build_desc["name"]}/ cache/"
+      system! "copy-to-target #{@quiet_flag} cache/#{build_desc["name"]}/ /home/ubuntu/cache/"
     end
 
     if File.directory?("cache/common")
-      system! "copy-to-target #{@quiet_flag} cache/common/ cache/"
+      system! "copy-to-target #{@quiet_flag} cache/common/ /home/ubuntu/cache/"
     end
   end
 
@@ -105,6 +105,7 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
   File.open("var/build-script", "w") do |script|
     script.puts "#!/bin/bash"
     script.puts "set -e"
+    script.puts "pushd /home/ubuntu"
     script.puts "export LANG='en_US.UTF-8'"
     script.puts "export LC_ALL='en_US.UTF-8'"
     script.puts "umask 002"
@@ -124,7 +125,7 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
       author_date = `cd inputs/#{dir} && git log --format=@%at -1 | date +"%F %T" -u -f -`.strip
       raise "error looking up author date in #{dir}" unless $?.exitstatus == 0
 
-      system! "copy-to-target #{@quiet_flag} inputs/#{dir} build/"
+      system! "copy-to-target #{@quiet_flag} inputs/#{dir} /home/ubuntu/build/"
       script.puts "(cd build/#{dir} && git reset -q --hard && git clean -q -f -d)"
     end
     script.puts
@@ -136,6 +137,7 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
     script.puts
     script.puts "cd build"
     script.puts build_desc["script"]
+    script.puts "popd"
   end
 
   info "Running build script (log in var/build.log)"
@@ -276,12 +278,12 @@ suites.each do |suite|
     build_one_configuration(suite, arch, build_desc)
 
     info "Grabbing results from target"
-    system! "copy-from-target #{@quiet_flag} out #{build_dir}"
+    system! "copy-from-target #{@quiet_flag} /home/ubuntu/out #{build_dir}"
 
     if enable_cache && !@options[:cache_ro]
       info "Grabbing cache from target"
-      system! "copy-from-target #{@quiet_flag} cache/#{package_name}/ #{cache_dir}"
-      system! "copy-from-target #{@quiet_flag} cache/common/ #{cache_dir}"
+      system! "copy-from-target #{@quiet_flag} /home/ubuntu/cache/#{package_name}/ #{cache_dir}"
+      system! "copy-from-target #{@quiet_flag} /home/ubuntu/cache/common/ #{cache_dir}"
     end
     base_manifest = File.read("var/base-#{suite}-#{arch}.manifest")
     base_manifests["#{suite}-#{arch}"] = base_manifest
