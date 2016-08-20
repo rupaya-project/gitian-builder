@@ -35,6 +35,10 @@ def info(str)
   puts str unless @options[:quiet]
 end
 
+def copy_sdk
+  system('cp /shared/cache/MacOSX10.9.sdk.tar.gz /shared/gitian-builder/inputs/')
+end
+
 def build_one_configuration(suite, arch, build_desc)
   FileUtils.rm_f("var/build.log")
 
@@ -196,6 +200,7 @@ in_sums = []
 build_dir = 'build'
 result_dir = '/shared/result'
 cache_dir = '/shared/cache'
+inputs_dir = 'inputs'
 var_dir = 'var'
 enable_cache = build_desc["enable_cache"]
 
@@ -203,6 +208,8 @@ FileUtils.rm_rf(build_dir)
 FileUtils.mkdir(build_dir)
 FileUtils.mkdir_p(result_dir)
 FileUtils.mkdir_p(var_dir)
+FileUtils.mkdir_p(inputs_dir)
+copy_sdk
 
 package_name = build_desc["name"] or raise "must supply name"
 package_name = sanitize(package_name, "package name")
