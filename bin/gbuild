@@ -36,7 +36,7 @@ def info(str)
 end
 
 def copy_sdk
-  system('cp /shared/cache/MacOSX10.9.sdk.tar.gz /shared/gitian-builder/inputs/')
+  system('cp /shared/cache/MacOSX10.*.sdk.tar.gz /shared/gitian-builder/inputs/')
 end
 
 def build_one_configuration(suite, arch, build_desc)
