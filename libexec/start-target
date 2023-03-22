@@ -6,10 +6,12 @@ ARCH=qemu$1
 SUFFIX=$2
 
 VMSW=KVM
-if [ -n "$USE_LXC" ]; then
+if [ "$USE_LXC" = "1" ]; then
     VMSW=LXC
-elif [ -n "$USE_VBOX" ]; then
+elif [ "$USE_VBOX" = "1" ]; then
     VMSW=VBOX
+elif [ "$USE_DOCKER" = "1" ]; then
+    VMSW=DOCKER
 fi
 
 case $VMSW in
@@ -31,7 +33,14 @@ case $VMSW in
     true #sudo lxc-start -n gitian -c var/target.log -f lxc.config
     ;;
   VBOX)
-    VBoxManage startvm "Gitian-${2}" # --type headless
+    VBoxManage startvm "Gitian-${2}" --type headless
     echo "Gitian-${2}" > var/target.vmname
+    ;;
+  DOCKER)
+    EXTRA_ARGS=""
+    if [ -n "$GITIAN_ALLOW_PRIVILEGED" ]; then
+        EXTRA_ARGS="--privileged"
+    fi
+    docker run -d --name gitian-target $EXTRA_ARGS base-$SUFFIX:latest > /dev/null
     ;;
 esac

@@ -1,3 +1,22 @@
+2019-05-23
+----------
+
+- Add `--skip-fetch` argument that skips fetching the latest remote source
+
+2019-05-13
+----------
+
+- No longer fetch repository from remote when the directory already exists
+
+2017-02-14
+----------
+
+- VirtualBox launches are now headless.  You can use the VirtualBox Manager to open the console UI if needed.
+- Debian on VirtualBox is supported via Vagrant Cloud images
+- Note that Debian on kvm is currently not supported because vmbuilder fails in the grub install stage
+- git submodule support - any submodules are cloned and checked out
+- Note that lxc-execute in Ubuntu 17.10 has a showstopper bug in stdin handling
+
 2015-12-12
 ----------
 

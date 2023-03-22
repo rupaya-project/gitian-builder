@@ -1,14 +1,16 @@
 #!/bin/sh
 set -e
 
-SUITE=lucid
+SUITE=xenial
 ARCH=amd64
 
 VMSW=KVM
-if [ -n "$USE_LXC" ]; then
+if [ "$USE_LXC" = "1" ]; then
     VMSW=LXC
-elif [ -n "$USE_VBOX" ]; then
+elif [ "$USE_VBOX" = "1" ]; then
     VMSW=VBOX
+elif [ "$USE_DOCKER" = "1" ]; then
+    VMSW=DOCKER
 fi
 
 usage() {
@@ -17,7 +19,7 @@ usage() {
   echo
   cat << EOF
   --help     display this help and exit
-  --suite U  build suite U instead of lucid
+  --suite U  build suite U instead of xenial
   --arch A   build architecture A (e.g. i386) instead of amd64
 EOF
 }
@@ -56,7 +58,7 @@ OUT=target-$SUITE-$ARCH
 
 case $VMSW in
   KVM)
-    qemu-img create -f qcow2 -o backing_file="$BASE.qcow2" "$OUT.qcow2"
+    qemu-img create -f qcow2 -o backing_fmt=qcow2,backing_file="$BASE.qcow2" "$OUT.qcow2"
     ;;
   LXC)
     cp -a --sparse=always $BASE $OUT
@@ -65,5 +67,8 @@ case $VMSW in
     ;;
   VBOX)
     VBoxManage snapshot "Gitian-${SUITE}-${ARCH}" restore "Gitian-Clean"
+    ;;
+  DOCKER)
+    true #Docker doesn't need to do anything
     ;;
 esac

@@ -1,17 +1,19 @@
 #!/bin/sh
 
 VMSW=KVM
-if [ -n "$USE_LXC" ]; then
+if [ "$USE_LXC" = "1" ]; then
     VMSW=LXC
-elif [ -n "$USE_VBOX" ]; then
+elif [ "$USE_VBOX" = "1" ]; then
     VMSW=VBOX
+elif [ "$USE_DOCKER" = "1" ]; then
+    VMSW=DOCKER
 fi
 
 case $VMSW in
   KVM)
     if [ ! -e var/target.pid ]; then exit; fi
 
-    on-target -u root halt
+    on-target -u root poweroff
     sleep 5
 
     if [ ! -e var/target.pid ]; then exit; fi
@@ -29,5 +31,9 @@ case $VMSW in
     if [ ! -e var/target.vmname ]; then exit; fi
     VBoxManage controlvm `cat var/target.vmname` savestate
     rm var/target.vmname
+    ;;
+  DOCKER)
+    docker container stop gitian-target > /dev/null
+    docker container rm gitian-target > /dev/null
     ;;
 esac

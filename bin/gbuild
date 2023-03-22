@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 require 'optparse'
 require 'yaml'
@@ -10,11 +10,13 @@ require 'pathname'
 @bitness = {
   'i386' => 32,
   'amd64' => 64,
+  'linux64' => 64,
 }
 
 @arches = {
   'i386' => 'i386',
   'amd64' => 'x86_64',
+  'linux64' => 'linux64',
 }
 
 def system!(cmd)
@@ -41,11 +43,12 @@ def copy_sdk(mac_sdk)
 end
 
 def build_one_configuration(suite, arch, build_desc)
+  FileUtils.rm_f("var/install.log")
   FileUtils.rm_f("var/build.log")
 
   bits = @bitness[arch] or raise "unknown architecture ${arch}"
 
-  if ENV["USE_LXC"]
+  if ENV["USE_LXC"] == "1"
       ENV["LXC_ARCH"] = arch
       ENV["LXC_SUITE"] = suite
   end
@@ -99,9 +102,46 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
     end
   end
 
-  info "Installing additional packages (log in var/install.log)"
-  system! "on-target sudo apt-get --no-install-recommends -y install #{build_desc["packages"].join(" ")}"
+  if build_desc["multiarch"]
+    info "Adding multiarch support (log in var/install.log)"
+    for a in build_desc["multiarch"]
+      system! "on-target -u root dpkg --add-architecture #{a} >> var/install.log 2>&1"
+    end
+  end
 
+  if build_desc["repositories"]
+    info "Adding repositories to the sources list (log in var/install.log)"
+    for r in build_desc["repositories"]
+      system! "on-target -u root tee -a /etc/apt/sources.list >> var/install.log 2>&1 << EOF
+#{r["source"]}
+EOF"
+    end
+  end
+
+  info "Updating apt-get repository (log in var/install.log)"
+  system! "on-target -u root apt-get update >> var/install.log 2>&1"
+
+  info "Installing additional packages (log in var/install.log)"
+  system! "on-target -u root -e DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends -y install #{build_desc["packages"].join(" ")} >> var/install.log 2>&1"
+
+  if build_desc["repositories"]
+    for r in build_desc["repositories"]
+      info "Installing additional packages from repository #{r["distribution"]} (log in var/install.log)"
+      system! "on-target -u root -e DEBIAN_FRONTEND=noninteractive apt-get -t #{r["distribution"]} --no-install-recommends -y install #{r["packages"].join(" ")} >> var/install.log 2>&1"
+    end
+  end
+
+  if build_desc["alternatives"]
+    info "Set alternatives (log in var/install.log)"
+    for a in build_desc["alternatives"]
+      system! "on-target -u root update-alternatives --set #{a["package"]} #{a["path"]} >> var/install.log 2>&1"
+    end
+  end
+
+  if @options[:upgrade] || system("on-target -u root '[ ! -e /var/cache/gitian/initial-upgrade ]'")
+      info "Upgrading system, may take a while (log in var/install.log)"
+      system! "on-target -u root bash < target-bin/upgrade-system.sh >> var/install.log 2>&1"
+  end
   info "Creating package manifest"
   system! "on-target sudo /shared/gitian-builder/target-bin/grab-packages.sh > var/base-#{suitearch}.manifest"
 
@@ -122,12 +162,14 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
       script.puts "GBUILD_COMMON_CACHE=$HOME/cache/common"
     end
     script.puts "MAKEOPTS=(-j#{@options[:num_procs]})"
+    script.puts "NUM_PROCS=#{@options[:num_procs]}"
+    script.puts "NUM_MEM=#{@options[:memory]}"
     script.puts
     author_date = nil
     build_desc["remotes"].each do |remote|
       dir = sanitize(remote["dir"], remote["dir"])
 
-      author_date = `cd inputs/#{dir} && git log --format=@%at -1 | date +"%F %T" -u -f -`.strip
+      author_date = `cd inputs/#{dir} && TZ=UTC git log --date='format-local:%F %T' --format="%ad" -1`.strip
       raise "error looking up author date in #{dir}" unless $?.exitstatus == 0
 
       system! "copy-to-target #{@quiet_flag} inputs/#{dir} /home/ubuntu/build/"
@@ -146,7 +188,11 @@ EOF" if build_desc["sudo"] and @options[:allow_sudo]
   end
 
   info "Running build script (log in var/build.log)"
-  system! "on-target setarch #{@arches[arch]} bash -x < var/build-script"
+  if ENV["CI"]
+    system! "on-target setarch #{@arches[arch]} bash -x < var/build-script 2>&1 | tee var/build.log"
+  else
+    system! "on-target setarch #{@arches[arch]} bash -x < var/build-script > var/build.log 2>&1"
+  end
 end
 
 ################################
@@ -181,7 +227,23 @@ OptionParser.new do |opts|
   opts.on("-o", "--cache-read-only", "only use existing cache files, do not update them") do |v|
     @options[:cache_ro] = v
   end
+  opts.on("--skip-fetch", "skip fetching the latest git objects and refs from the remote source") do |v|
+    @options[:skip_fetch] = v
+  end
+  opts.on("--fetch-branches", "fetch branches from the remote source") do |v|
+    @options[:fetch_branches] = v
+  end
+  opts.on("--fetch-tags", "fetch tags from the remote source") do |v|
+    @options[:fetch_tags] = v
+  end
+  opts.on("--skip-cleanup", "skip cleaning up the target VM. this may be useful for copying additional files from the target after the build") do |v|
+    @options[:skip_cleanup] = v
+  end
 end.parse!
+
+if ENV["USE_LXC"] != "1" and ENV["USE_DOCKER"] != "1" and ENV["USE_VBOX"] != "1" and !File.exist?("/dev/kvm")
+    $stderr.puts "\n************* WARNING: kvm not loaded, this will probably not work out\n\n"
+end
 
 base_dir = Pathname.new(__FILE__).expand_path.dirname.parent
 libexec_dir = base_dir + 'libexec'
@@ -227,6 +289,14 @@ distro = build_desc["distro"] || "ubuntu"
 suites = build_desc["suites"] or raise "must supply suites"
 archs = build_desc["architectures"] or raise "must supply architectures"
 build_desc["reference_datetime"] or build_desc["remotes"].size > 0 or raise "must supply `reference_datetime` or `remotes`"
+docker_image_digests = build_desc["docker_image_digests"] || []
+
+# if docker_image_digests are supplied, it must be the same length as suites
+if docker_image_digests.size > 0 and suites.size != docker_image_digests.size
+  raise "`suites` and `docker_image_digests` must both be the same size if both are supplied"
+elsif ENV["USE_DOCKER"] == "1" and docker_image_digests.size > 0 and suites.size == docker_image_digests.size
+  suites = docker_image_digests
+end
 
 ENV['DISTRO'] = distro
 
@@ -266,14 +336,24 @@ build_desc["remotes"].each do |remote|
     remote["url"] = urls[remote["dir"]]
   end
   dir = sanitize(remote["dir"], remote["dir"])
-  unless File.exist?("inputs/#{dir}")
-      system!("git init inputs/#{dir}")
-  end
-  system!("cd inputs/#{dir} && git fetch --update-head-ok #{sanitize_path(remote["url"], remote["url"])} +refs/tags/*:refs/tags/* +refs/heads/*:refs/heads/*")
   commit = sanitize(remote["commit"], remote["commit"])
-  commit = `cd inputs/#{dir} && git log --format=%H -1 #{commit}`.strip
-  raise "error looking up commit for tag #{remote["commit"]}" unless $?.exitstatus == 0
-  system!("cd inputs/#{dir} && git checkout -q #{commit}")
+  unless File.exist?("inputs/#{dir}")
+    system!("git init inputs/#{dir}")
+  end
+  if !@options[:skip_fetch]
+    if @options[:fetch_branches]
+      system!("cd inputs/#{dir} && git fetch -f --update-head-ok #{sanitize_path(remote["url"], remote["url"])} +refs/heads/*:refs/heads/*")
+    end
+    if @options[:fetch_tags]
+      system!("cd inputs/#{dir} && git fetch -f --update-head-ok #{sanitize_path(remote["url"], remote["url"])} +refs/tags/*:refs/tags/*")
+    end
+    system!("cd inputs/#{dir} && git fetch -f --update-head-ok #{sanitize_path(remote["url"], remote["url"])} #{commit}")
+    system!("cd inputs/#{dir} && git checkout -q FETCH_HEAD")
+  else
+    system!("cd inputs/#{dir} && git checkout -q #{commit}")
+  end
+  system!("cd inputs/#{dir} && git submodule update --init --recursive --force")
+  commit = `cd inputs/#{dir} && git log --format=%H -1`.strip
   in_sums << "git:#{commit} #{dir}"
 end
 
@@ -301,7 +381,12 @@ suites.each do |suite|
   end
 end
 
-out_dir = File.join(@result_dir, "out")
+unless @options[:skip_cleanup]
+  info "Cleaning up target"
+  system "stop-target"
+end
+
+out_dir = File.join(build_dir, "out")
 out_sums = {}
 cache_common_dir = File.join(@cache_dir, "common")
 cache_package_dir = File.join(@cache_dir, "#{package_name}")
